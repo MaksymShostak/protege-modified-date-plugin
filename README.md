@@ -10,6 +10,16 @@ Developed by [Maksym Shostak](http://orcid.org/0000-0001-8017-8797).
 
 * **Smart Filtering:** Ignores newly declared entities until they are actually edited. Prevents timestamping built-in foundational entities like `owl:Thing`.
 
+* **Protégé Preferences Integration:** Fully configurable at runtime via the Protégé Preferences menu (File > Preferences).
+
+* **Configurable Options:**
+
+  * Choose between the current system date (UTC ISO-8601 or Local Offset) or a custom static text string.
+
+  * Define the target Annotation Property IRI (defaults to `http://purl.org/dc/terms/modified`).
+
+  * Toggle tracking for Classes, Named Individuals, or both.
+
 * **Thread-Safe:** Includes pre-emptive handling for Protégé's Swing Event Dispatch Thread (EDT) to prevent `ConcurrentModificationException` during listener broadcasts.
 
 ## Requirements
@@ -42,6 +52,14 @@ Developed by [Maksym Shostak](http://orcid.org/0000-0001-8017-8797).
 
 1. Open an ontology in Protégé.
 
-2. Edit any Class or Named Individual in the ontology. The plugin will automatically attach or update the configured annotation property.
+2. Navigate to **File > Preferences** (or **Protégé > Preferences** on macOS).
+
+3. Select the **Modified Date Plugin** tab.
+
+4. Configure your desired timestamp format, target annotation IRI, and target entities.
+
+5. Click **OK**.
+
+6. Edit any Class or Named Individual in the ontology. The plugin will automatically attach or update the configured annotation property.
 
 *Note: Tracing logs for plugin operations are output at the `DEBUG` level. To view them, ensure your Protégé `logback.xml` configuration is set to print `DEBUG` messages.*

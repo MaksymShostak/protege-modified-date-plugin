@@ -7,4 +7,9 @@
         <!-- CRITICAL FIX: You MUST specify the editorKitId, otherwise Protégé ignores the hook! -->
         <editorKitId value="OWLEditorKit"/>
     </extension>
+    <!-- Register the Preferences Panel -->
+    <extension id="ModifiedDatePreferences" point="org.protege.editor.core.application.preferencespanel">
+        <label value="Modified Date Plugin"/>
+        <class value="com.haddenindustries.protege.ModifiedDatePreferencesPanel"/>
+    </extension>
 </plugin>

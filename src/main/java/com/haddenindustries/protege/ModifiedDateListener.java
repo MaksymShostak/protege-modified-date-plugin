@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import javax.swing.SwingUtilities;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -19,7 +21,6 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
     
     private final OWLOntologyManager manager;
     private final OWLDataFactory factory;
-    private final OWLAnnotationProperty modifiedProp;
     
     // CRITICAL: A thread-safe flag to prevent the listener from triggering itself
     private final AtomicBoolean isUpdating = new AtomicBoolean(false); 
@@ -27,7 +28,6 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
     public ModifiedDateListener(OWLOntologyManager manager) {
         this.manager = manager;
         this.factory = manager.getOWLDataFactory();
-        this.modifiedProp = factory.getOWLAnnotationProperty(IRI.create("http://purl.org/dc/terms/modified"));
     }
 
     @Override
@@ -62,10 +62,27 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                 log.debug("Identified {} newly created entities in this batch.", newlyCreatedEntities.size());
             }
             
-            // Generate UTC time, truncated to seconds to comply with standard ISO-8601 formatting (e.g., 2026-05-01T12:37:12Z)
-            String timestampStr = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
+            // --- DYNAMIC PREFERENCES RESOLUTION ---
+            ModifiedDatePreferences prefs = ModifiedDatePreferences.getInstance();
+            
+            String timestampStr;
+            if (prefs.isUseSystemDate()) {
+                if (prefs.isUseUTC()) {
+                    timestampStr = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString();
+                } else {
+                    timestampStr = OffsetDateTime.now().truncatedTo(ChronoUnit.SECONDS).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+                }
+            } else {
+                timestampStr = prefs.getCustomDateText();
+            }
+            
+            OWLAnnotationProperty modifiedProp = factory.getOWLAnnotationProperty(IRI.create(prefs.getAnnotationPropertyIRI()));
+            
             OWLLiteral timestamp = factory.getOWLLiteral(timestampStr, OWL2Datatype.XSD_DATE_TIME);
             OWLAnnotation newAnnotation = factory.getOWLAnnotation(modifiedProp, timestamp);
+
+            boolean applyToClasses = prefs.isApplyToClasses();
+            boolean applyToIndividuals = prefs.isApplyToIndividuals();
 
             // 2. Intercept and Analyze
             for (OWLOntologyChange change : changes) {
@@ -96,9 +113,22 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                     for (OWLEntity entity : entitiesToProcess) {
                         log.debug("Checking entity: {}", entity);
                         
-                        // Only process Classes and Named Individuals
-                        if (!entity.isOWLClass() && !entity.isOWLNamedIndividual()) {
+                        boolean isClass = entity.isOWLClass();
+                        boolean isIndividual = entity.isOWLNamedIndividual();
+                        
+                        // Check entity types against preferences
+                        if (!isClass && !isIndividual) {
                             log.debug("Skipped: Entity is not a Class or NamedIndividual.");
+                            continue;
+                        }
+                        
+                        if (isClass && !applyToClasses) {
+                            log.debug("Skipped: Preferences dictate skipping Classes.");
+                            continue;
+                        }
+                        
+                        if (isIndividual && !applyToIndividuals) {
+                            log.debug("Skipped: Preferences dictate skipping Named Individuals.");
                             continue;
                         }
 
