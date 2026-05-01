@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.0"?>
+<plugin>
+    <!-- Register the hook to trigger when the OWL Editor Kit loads -->
+    <extension id="ModifiedDateHook" point="org.protege.editor.core.application.EditorKitHook">
+        <class value="com.haddenindustries.protege.ModifiedDateHook"/>
+        <!-- CRITICAL FIX: You MUST specify the editorKitId, otherwise Protégé ignores the hook! -->
+        <editorKitId value="OWLEditorKit"/>
+    </extension>
+</plugin>

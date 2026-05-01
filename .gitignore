@@ -1,3 +1,4 @@
+# Maven
 target/
 pom.xml.tag
 pom.xml.releaseBackup
@@ -12,6 +13,33 @@ buildNumber.properties
 
 # Eclipse m2e generated files
 # Eclipse Core
+# Compiled class file
+*.class
+
+# Log file
+*.log
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDEs (IntelliJ, Eclipse, VS Code)
+.idea/
+*.iml
+*.iws
 .project
 # JDT-specific (Eclipse Java Development Tools)
 .classpath
+.settings/
+.vscode/
+
+# Package Files (Do not commit built jars)
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
