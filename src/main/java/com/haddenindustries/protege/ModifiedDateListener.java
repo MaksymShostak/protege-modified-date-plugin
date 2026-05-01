@@ -47,7 +47,7 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
             List<OWLOntologyChange> annotationChanges = new ArrayList<>();
             
             // Track IRIs processed in this event batch to prevent redundant axiom generation
-            // Tracking by IRI prevents double-processing if an entity uses punning (Class and Individual sharing an IRI)
+            // Tracking by IRI prevents double-processing if an entity uses punning
             Set<IRI> processedIRIs = new HashSet<>();
             
             // Pre-pass: Find newly created entities (entities being declared) to exclude them from 'modified' dates
@@ -77,12 +77,13 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
             }
             
             OWLAnnotationProperty modifiedProp = factory.getOWLAnnotationProperty(IRI.create(prefs.getAnnotationPropertyIRI()));
-            
             OWLLiteral timestamp = factory.getOWLLiteral(timestampStr, OWL2Datatype.XSD_DATE_TIME);
             OWLAnnotation newAnnotation = factory.getOWLAnnotation(modifiedProp, timestamp);
 
             boolean applyToClasses = prefs.isApplyToClasses();
             boolean applyToIndividuals = prefs.isApplyToIndividuals();
+            boolean applyToObjectProperties = prefs.isApplyToObjectProperties();
+            boolean applyToDataProperties = prefs.isApplyToDataProperties();
 
             // 2. Intercept and Analyze
             for (OWLOntologyChange change : changes) {
@@ -97,7 +98,7 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                     Set<OWLEntity> entitiesToProcess = new HashSet<>(axiom.getSignature());
 
                     // CRITICAL FIX: Annotations do not explicitly put their subject entities into the axiom signature.
-                    // Bypass getEntitiesInSignature cache quirks by explicitly constructing and testing the entities for the IRI.
+                    // Generate permutations for all 4 supported types to explicitly verify structural presence below.
                     if (axiom instanceof OWLAnnotationAssertionAxiom) {
                         OWLAnnotationSubject subject = ((OWLAnnotationAssertionAxiom) axiom).getSubject();
                         log.debug("Axiom is an Annotation Assertion. Subject: {}", subject);
@@ -105,30 +106,23 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                             IRI subjectIRI = (IRI) subject;
                             entitiesToProcess.add(factory.getOWLClass(subjectIRI));
                             entitiesToProcess.add(factory.getOWLNamedIndividual(subjectIRI));
-                            log.debug("Added Class and NamedIndividual permutations for IRI: {}", subjectIRI);
+                            entitiesToProcess.add(factory.getOWLObjectProperty(subjectIRI));
+                            entitiesToProcess.add(factory.getOWLDataProperty(subjectIRI));
+                            log.debug("Added entity type permutations for IRI: {}", subjectIRI);
                         }
                     }
 
-                    // 3. Find the modified entities (Classes and Named Individuals)
+                    // 3. Find the modified entities
                     for (OWLEntity entity : entitiesToProcess) {
                         log.debug("Checking entity: {}", entity);
                         
                         boolean isClass = entity.isOWLClass();
                         boolean isIndividual = entity.isOWLNamedIndividual();
+                        boolean isObjectProp = entity.isOWLObjectProperty();
+                        boolean isDataProp = entity.isOWLDataProperty();
                         
-                        // Check entity types against preferences
-                        if (!isClass && !isIndividual) {
-                            log.debug("Skipped: Entity is not a Class or NamedIndividual.");
-                            continue;
-                        }
-                        
-                        if (isClass && !applyToClasses) {
-                            log.debug("Skipped: Preferences dictate skipping Classes.");
-                            continue;
-                        }
-                        
-                        if (isIndividual && !applyToIndividuals) {
-                            log.debug("Skipped: Preferences dictate skipping Named Individuals.");
+                        if (!isClass && !isIndividual && !isObjectProp && !isDataProp) {
+                            log.debug("Skipped: Entity is not a supported type.");
                             continue;
                         }
 
@@ -150,22 +144,49 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                             continue;
                         }
 
-                        // CRITICAL FIX: In OWL API, an entity might only exist as the subject of annotations.
-                        // In that case, containsEntityInSignature() might return false. Check both structural signature and annotations.
-                        boolean hasStructuralAxioms = ontology.containsEntityInSignature(entity);
+                        // CRITICAL FIX: To prevent an ObjectProperty from being incorrectly processed as an OWLClass 
+                        // (and thus bypassing the user's preference toggles), verify its explicit structural presence.
+                        boolean hasStructuralAxiomsAsThisType = ontology.containsEntityInSignature(entity);
                         boolean hasAnnotations = !ontology.getAnnotationAssertionAxioms(entity.getIRI()).isEmpty();
                         
-                        log.debug("Entity state - hasStructuralAxioms: {}, hasAnnotations: {}", hasStructuralAxioms, hasAnnotations);
-                        
-                        if (!hasStructuralAxioms && !hasAnnotations) {
-                            log.debug("Skipped: Entity has no structural axioms or annotations (dangling reference).");
-                            continue; 
+                        if (!hasStructuralAxiomsAsThisType) {
+                            // Check if the IRI exists structurally as ANY of the supported types
+                            boolean hasAnyType = ontology.containsEntityInSignature(factory.getOWLClass(entity.getIRI())) ||
+                                                 ontology.containsEntityInSignature(factory.getOWLNamedIndividual(entity.getIRI())) ||
+                                                 ontology.containsEntityInSignature(factory.getOWLObjectProperty(entity.getIRI())) ||
+                                                 ontology.containsEntityInSignature(factory.getOWLDataProperty(entity.getIRI()));
+
+                            if (hasAnyType) {
+                                log.debug("Skipped: Entity exists as a different structural type. Preventing cross-type pollution.");
+                                continue;
+                            } else if (!hasAnnotations) {
+                                log.debug("Skipped: Entity has no structural axioms and no annotations (dangling reference).");
+                                continue; 
+                            }
+                        }
+
+                        // Evaluate explicitly against preferences
+                        if (isClass && !applyToClasses) {
+                            log.debug("Skipped: Preferences dictate skipping Classes.");
+                            continue;
+                        }
+                        if (isIndividual && !applyToIndividuals) {
+                            log.debug("Skipped: Preferences dictate skipping Named Individuals.");
+                            continue;
+                        }
+                        if (isObjectProp && !applyToObjectProperties) {
+                            log.debug("Skipped: Preferences dictate skipping Object Properties.");
+                            continue;
+                        }
+                        if (isDataProp && !applyToDataProperties) {
+                            log.debug("Skipped: Preferences dictate skipping Data Properties.");
+                            continue;
                         }
                         
                         // 3a. Find and remove any existing dcterms:modified annotations
                         for (OWLAnnotationAssertionAxiom existingAnnotation : ontology.getAnnotationAssertionAxioms(entity.getIRI())) {
                             if (existingAnnotation.getProperty().equals(modifiedProp)) {
-                                log.debug("Found existing dcterms:modified. Queueing removal.");
+                                log.debug("Found existing modified date annotation. Queueing removal.");
                                 annotationChanges.add(new RemoveAxiom(ontology, existingAnnotation));
                             }
                         }
@@ -174,7 +195,7 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                         OWLAnnotationAssertionAxiom annotationAxiom = factory.getOWLAnnotationAssertionAxiom(entity.getIRI(), newAnnotation);
                         
                         // Queue the new change
-                        log.debug("Queueing addition of new dcterms:modified timestamp.");
+                        log.debug("Queueing addition of new modified date timestamp.");
                         annotationChanges.add(new AddAxiom(ontology, annotationAxiom));
                         processedIRIs.add(entity.getIRI());
                     }
@@ -194,7 +215,7 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                     try {
                         manager.applyChanges(annotationChanges);
                         for (IRI iri : processedIRIs) {
-                            log.debug("Updated dcterms:modified date for: {}", iri);
+                            log.debug("Updated modified date for: {}", iri);
                         }
                     } catch (Exception e) {
                         log.error("Failed to apply modified date changes automatically", e);

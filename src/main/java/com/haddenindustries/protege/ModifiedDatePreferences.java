@@ -36,4 +36,10 @@ public class ModifiedDatePreferences {
     
     public boolean isApplyToIndividuals() { return getPrefs().getBoolean("APPLY_INDIVIDUALS", true); }
     public void setApplyToIndividuals(boolean val) { getPrefs().putBoolean("APPLY_INDIVIDUALS", val); }
+    
+    public boolean isApplyToObjectProperties() { return getPrefs().getBoolean("APPLY_OBJ_PROP", false); }
+    public void setApplyToObjectProperties(boolean val) { getPrefs().putBoolean("APPLY_OBJ_PROP", val); }
+    
+    public boolean isApplyToDataProperties() { return getPrefs().getBoolean("APPLY_DATA_PROP", false); }
+    public void setApplyToDataProperties(boolean val) { getPrefs().putBoolean("APPLY_DATA_PROP", val); }
 }

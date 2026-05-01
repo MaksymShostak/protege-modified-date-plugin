@@ -13,6 +13,8 @@ public class ModifiedDatePreferencesPanel extends OWLPreferencesPanel {
     private JTextField annotationPropertyTextField;
     private JCheckBox applyToClassesCheckBox;
     private JCheckBox applyToIndividualsCheckBox;
+    private JCheckBox applyToObjectPropertiesCheckBox;
+    private JCheckBox applyToDataPropertiesCheckBox;
 
     @Override
     public void initialise() {
@@ -37,7 +39,7 @@ public class ModifiedDatePreferencesPanel extends OWLPreferencesPanel {
         add(useSystemDateRadio, gbc);
         gbc.gridy++;
         
-        useUtcCheckBox = new JCheckBox("Format System Date as UTC (ISO-8601)");
+        useUtcCheckBox = new JCheckBox("as of UTC");
         gbc.insets.left = 25; // Indent
         add(useUtcCheckBox, gbc);
         gbc.insets.left = 5; // Reset indent
@@ -86,6 +88,14 @@ public class ModifiedDatePreferencesPanel extends OWLPreferencesPanel {
         
         applyToIndividualsCheckBox = new JCheckBox("Apply to Named Individuals");
         add(applyToIndividualsCheckBox, gbc);
+        gbc.gridy++;
+        
+        applyToObjectPropertiesCheckBox = new JCheckBox("Apply to Object Properties");
+        add(applyToObjectPropertiesCheckBox, gbc);
+        gbc.gridy++;
+        
+        applyToDataPropertiesCheckBox = new JCheckBox("Apply to Data Properties");
+        add(applyToDataPropertiesCheckBox, gbc);
 
         // --- Push layout to top ---
         gbc.gridy++;
@@ -101,6 +111,8 @@ public class ModifiedDatePreferencesPanel extends OWLPreferencesPanel {
         annotationPropertyTextField.setText(prefs.getAnnotationPropertyIRI());
         applyToClassesCheckBox.setSelected(prefs.isApplyToClasses());
         applyToIndividualsCheckBox.setSelected(prefs.isApplyToIndividuals());
+        applyToObjectPropertiesCheckBox.setSelected(prefs.isApplyToObjectProperties());
+        applyToDataPropertiesCheckBox.setSelected(prefs.isApplyToDataProperties());
 
         updateComponentStates();
     }
@@ -119,6 +131,8 @@ public class ModifiedDatePreferencesPanel extends OWLPreferencesPanel {
         prefs.setAnnotationPropertyIRI(annotationPropertyTextField.getText());
         prefs.setApplyToClasses(applyToClassesCheckBox.isSelected());
         prefs.setApplyToIndividuals(applyToIndividualsCheckBox.isSelected());
+        prefs.setApplyToObjectProperties(applyToObjectPropertiesCheckBox.isSelected());
+        prefs.setApplyToDataProperties(applyToDataPropertiesCheckBox.isSelected());
     }
 
     @Override
