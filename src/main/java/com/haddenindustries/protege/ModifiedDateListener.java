@@ -50,20 +50,34 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
             // Tracking by IRI prevents double-processing if an entity uses punning
             Set<IRI> processedIRIs = new HashSet<>();
             
-            // Pre-pass: Find newly created entities (entities being declared) to exclude them from 'modified' dates
+            // --- DYNAMIC PREFERENCES RESOLUTION ---
+            ModifiedDatePreferences prefs = ModifiedDatePreferences.getInstance();
+            OWLAnnotationProperty modifiedProp = factory.getOWLAnnotationProperty(IRI.create(prefs.getAnnotationPropertyIRI()));
+            
+            // Pre-pass: Find newly created entities and explicitly removed modified dates
             Set<OWLEntity> newlyCreatedEntities = new HashSet<>();
+            Set<IRI> explicitlyRemovedModifiedDates = new HashSet<>();
+            
             for (OWLOntologyChange change : changes) {
                 if (change instanceof AddAxiom && change.getAxiom() instanceof OWLDeclarationAxiom) {
                     newlyCreatedEntities.add(((OWLDeclarationAxiom) change.getAxiom()).getEntity());
+                }
+                
+                // BUG FIX: Detect if the user explicitly deleted the tracked modified date annotation
+                if (change instanceof RemoveAxiom && change.getAxiom() instanceof OWLAnnotationAssertionAxiom) {
+                    OWLAnnotationAssertionAxiom annAxiom = (OWLAnnotationAssertionAxiom) change.getAxiom();
+                    if (annAxiom.getProperty().equals(modifiedProp) && annAxiom.getSubject() instanceof IRI) {
+                        explicitlyRemovedModifiedDates.add((IRI) annAxiom.getSubject());
+                    }
                 }
             }
             
             if (!newlyCreatedEntities.isEmpty()) {
                 log.debug("Identified {} newly created entities in this batch.", newlyCreatedEntities.size());
+			}
+            if (!explicitlyRemovedModifiedDates.isEmpty()) {
+                log.debug("Identified {} manual removals of the modified date property.", explicitlyRemovedModifiedDates.size());
             }
-            
-            // --- DYNAMIC PREFERENCES RESOLUTION ---
-            ModifiedDatePreferences prefs = ModifiedDatePreferences.getInstance();
             
             String timestampStr;
             if (prefs.isUseSystemDate()) {
@@ -76,7 +90,6 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                 timestampStr = prefs.getCustomDateText();
             }
             
-            OWLAnnotationProperty modifiedProp = factory.getOWLAnnotationProperty(IRI.create(prefs.getAnnotationPropertyIRI()));
             OWLLiteral timestamp = factory.getOWLLiteral(timestampStr, OWL2Datatype.XSD_DATE_TIME);
             OWLAnnotation newAnnotation = factory.getOWLAnnotation(modifiedProp, timestamp);
 
@@ -116,6 +129,12 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                     for (OWLEntity entity : entitiesToProcess) {
                         log.debug("Checking entity: {}", entity);
                         
+                        // BUG FIX: Do not process if the user explicitly wanted the date removed in this UI interaction
+                        if (explicitlyRemovedModifiedDates.contains(entity.getIRI())) {
+                            log.debug("Skipped: Preserving manual deletion of modified date for IRI: {}", entity.getIRI());
+                            continue;
+                        }
+
                         boolean isClass = entity.isOWLClass();
                         boolean isIndividual = entity.isOWLNamedIndividual();
                         boolean isObjectProp = entity.isOWLObjectProperty();
@@ -183,7 +202,7 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
                             continue;
                         }
                         
-                        // 3a. Find and remove any existing dcterms:modified annotations
+                        // 3a. Find and remove any existing modified date annotations
                         for (OWLAnnotationAssertionAxiom existingAnnotation : ontology.getAnnotationAssertionAxioms(entity.getIRI())) {
                             if (existingAnnotation.getProperty().equals(modifiedProp)) {
                                 log.debug("Found existing modified date annotation. Queueing removal.");
