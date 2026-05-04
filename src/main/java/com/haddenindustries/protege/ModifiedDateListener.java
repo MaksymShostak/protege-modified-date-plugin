@@ -44,6 +44,19 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
         boolean shouldUnlockImmediately = true;
 
         try {
+            // --- HISTORY MANAGER FIX ---
+            // Prevent the plugin from fighting the user when they use Undo/Redo.
+            // By inspecting the stack trace, we can completely ignore changes triggered by history navigation.
+            for (StackTraceElement element : Thread.currentThread().getStackTrace()) {
+                if (element.getClassName().startsWith("org.protege.") && 
+                   (element.getMethodName().equals("undo") || element.getMethodName().equals("redo"))) {
+                    log.debug("Skipped: Changes were triggered by a Protégé Undo/Redo operation.");
+                    return;
+                }
+            }
+
+            log.debug("Received {} ontology changes for processing.", changes.size());
+
             List<OWLOntologyChange> annotationChanges = new ArrayList<>();
             
             // Track IRIs processed in this event batch to prevent redundant axiom generation
@@ -58,23 +71,44 @@ public class ModifiedDateListener implements OWLOntologyChangeListener {
             Set<OWLEntity> newlyCreatedEntities = new HashSet<>();
             Set<IRI> explicitlyRemovedModifiedDates = new HashSet<>();
             
+            boolean onlyModifiedDateChanges = true;
+            boolean hasAxiomChanges = false;
+            
             for (OWLOntologyChange change : changes) {
-                if (change instanceof AddAxiom && change.getAxiom() instanceof OWLDeclarationAxiom) {
-                    newlyCreatedEntities.add(((OWLDeclarationAxiom) change.getAxiom()).getEntity());
-                }
-                
-                // BUG FIX: Detect if the user explicitly deleted the tracked modified date annotation
-                if (change instanceof RemoveAxiom && change.getAxiom() instanceof OWLAnnotationAssertionAxiom) {
-                    OWLAnnotationAssertionAxiom annAxiom = (OWLAnnotationAssertionAxiom) change.getAxiom();
-                    if (annAxiom.getProperty().equals(modifiedProp) && annAxiom.getSubject() instanceof IRI) {
-                        explicitlyRemovedModifiedDates.add((IRI) annAxiom.getSubject());
+                if (change.isAxiomChange()) {
+                    hasAxiomChanges = true;
+                    OWLAxiom axiom = change.getAxiom();
+                    
+                    if (change instanceof AddAxiom && axiom instanceof OWLDeclarationAxiom) {
+                        newlyCreatedEntities.add(((OWLDeclarationAxiom) axiom).getEntity());
+                        onlyModifiedDateChanges = false;
+                    } else if (axiom instanceof OWLAnnotationAssertionAxiom) {
+                        OWLAnnotationAssertionAxiom annAxiom = (OWLAnnotationAssertionAxiom) axiom;
+                        if (annAxiom.getProperty().equals(modifiedProp)) {
+                            // BUG FIX: Detect if the user explicitly deleted the tracked modified date annotation
+                            if (change instanceof RemoveAxiom && annAxiom.getSubject() instanceof IRI) {
+                                explicitlyRemovedModifiedDates.add((IRI) annAxiom.getSubject());
+                            }
+                        } else {
+                            onlyModifiedDateChanges = false;
+                        }
+                    } else {
+                        onlyModifiedDateChanges = false;
                     }
+                } else {
+                    onlyModifiedDateChanges = false;
                 }
+            }
+
+            // If the batch ONLY contains edits or removals to the modified date itself, skip generating a new one.
+            if (hasAxiomChanges && onlyModifiedDateChanges) {
+                log.debug("Skipped: Batch contains ONLY modified date changes (manual edit/removal).");
+                return;
             }
             
             if (!newlyCreatedEntities.isEmpty()) {
                 log.debug("Identified {} newly created entities in this batch.", newlyCreatedEntities.size());
-			}
+            }
             if (!explicitlyRemovedModifiedDates.isEmpty()) {
                 log.debug("Identified {} manual removals of the modified date property.", explicitlyRemovedModifiedDates.size());
             }
