@@ -2,7 +2,7 @@
 
 A plugin for [Protégé OWL ontology editor](https://protege.stanford.edu/) (5.5.0+) that automatically appends or updates a modified date annotation (e.g., `dcterms:modified`) on an `owl:Class` or `owl:NamedIndividual` whenever its axioms or annotations are changed in the editor.
 
-Developed by [Maksym Shostak](http://orcid.org/0000-0001-8017-8797).
+Developed by [Maksym Shostak](http://orcid.org/0000-0001-8017-8797) in [Hadden Industries Ltd](https://data.companieshouse.gov.uk/doc/company/07862561).
 
 ## Features
 
@@ -14,11 +14,19 @@ Developed by [Maksym Shostak](http://orcid.org/0000-0001-8017-8797).
 
 * **Configurable Options:**
 
-  * Choose between the current system date (UTC ISO-8601 or Local Offset) or a custom static text string.
+  * Choose between the current system date and time (in UTC or local time) or a custom static text string.
 
   * Define the target Annotation Property IRI (defaults to `http://purl.org/dc/terms/modified`).
 
-  * Toggle tracking for Classes, Named Individuals, or both.
+  * Toggle separate tracking for
+  
+	* Classes
+	
+	* Named Individuals
+	
+	* Object Properties
+	
+	* Data Properties
 
 * **Thread-Safe:** Includes pre-emptive handling for Protégé's Swing Event Dispatch Thread (EDT) to prevent `ConcurrentModificationException` during listener broadcasts.
 
